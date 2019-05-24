@@ -1,0 +1,76 @@
+==========
+To calibrate camera (that is, to get calibration data to be used by AprilTag)
+==========
+### Compute calibration values using ROS packages: pointgrey_camera_driver and camera_calibration
+# In terminal A:
+roslaunch pointgrey_camera_driver camera.launch
+
+# In terminal B:
+rosrun camera_calibration cameracalibrator.py --size 7x5 --square 0.032 image:=/camera/image_color camera:/camera
+
+### Modify visionServer code with appropriate camera calibration data
+# In conePickAndPlace/visionServer/src/VisionServer.cpp, update the values in the InitDetectionInfo() function
+# apriltag_detection_info_t InitDetectionInfo() {
+#   apriltag_detection_info_t ret;
+#   
+#   ret.tagsize = .0292;//.0352;  // meter
+#   ret.fx = 1301.54;  // pixel
+#   ret.fy = 1302.22;  // pixel
+#   ret.cx = 633.76;  // pixel
+#   ret.cy = 474.73;  // pixel
+# 
+#   return ret;
+# }
+
+# NOTE: the following instruction might apply, but I (MQM) do not think so:
+# "you have to pass in a negative fx parameter.  This is ... due to the OpenCV convention of having z negative"
+# (from https://april.eecs.umich.edu/pipermail/apriltag-devel/2017-April/000079.html)
+
+
+
+==========
+To compile software
+==========
+### Prerequisites:
+# 1. Install appropriate pointgrey "flycapture" library
+
+### Compile other libraries:
+# (from this folder)
+mkdir lib && cd lib
+git clone https://github.com/opencv/opencv.git -b 4.0.1
+git clone https://github.com/zeromq/libzmq.git -b v4.3.1
+git clone https://github.com/AprilRobotics/apriltag.git
+cd opencv
+mkdir build && cd build
+cmake ..
+make
+cd ../../libzmq
+mkdir build && cd build
+cmake ..
+make
+cd ../../apriltag
+mkdir build && cd build
+cmake ..
+make
+cd ../../..
+
+### Compile this project
+cd visionServer
+mkdir build && cd build
+cmake ..
+make
+
+
+
+==========
+To use software
+==========
+### On robot controller, run appropriate client program
+
+### Run vision server program
+# (in conePickAndPlace/visionServer/build directory)
+./visionServer
+
+### Run python program that utilizes vision data and interfaces with UR
+# (in conePickAndPlace/python directory)
+python3 pick_and_place_spool.py
