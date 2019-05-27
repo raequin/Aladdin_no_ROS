@@ -34,40 +34,39 @@ IMAGE_TOP = 0
 IMAGE_HEIGHT = 512
 IMAGE_CENTER_U = IMAGE_WIDTH / 2
 IMAGE_CENTER_V = IMAGE_HEIGHT / 2
-CIRCLE_ERROR_TOLERANCE = 8  # Acceptable image error norm, in pixels
-CIRCLE_RADIUS_MIN = 45
-CIRCLE_RADIUS_MAX = 75
+CIRCLE_ERROR_TOLERANCE = 4  # Acceptable image error norm, in pixels
+CIRCLE_RADIUS_MIN = 55
+CIRCLE_RADIUS_MAX = 95
 PROPORTIONAL_VS_GAIN = 1/2000  # Convert error in pixels to m (sort of)
 
 # Values used by cone-pick routine
-NUM_ROWS = 4  # How many cones along one axis of pallet
-NUM_COLS = 2  # How many cones along the other axis of pallet
+# Looking down on pallet, first cone to be picked is at origin of pallet coordinate system
+NUM_ROWS = 4  # Count of cones in pallet y-direction
+NUM_COLS = 2  # Count of cones in pallet x-direction
 NUM_LAYERS = 1  # How many layers of cones on the pallet
 CONE_SPACING = .29  # Distance from cone center to cone center (m)
 PALLET_LAYER_HEIGHT = .32  # Vertical distance from top of one cone layer to next
 BOTTOM_CONE_HEIGHT = -.541  # z-coordinate of cone-tube top in robot base frame
-CONE_TOP_TO_TOOL_DIST = .531  # Offset in cone-axis direction between cone top and tool flange during scan
-NOMINAL_FIRST_CONE_SCAN_X = -.735  # x-coordinate (in base frame) for scanning nominal first cone location
-NOMINAL_FIRST_CONE_SCAN_Y = .213  # y-coordinate (in base frame) for scanning nominal first cone location
-NOMINAL_FIRST_CONE_SCAN_Z = BOTTOM_CONE_HEIGHT + CONE_TOP_TO_TOOL_DIST + (NUM_LAYERS-1) * PALLET_LAYER_HEIGHT  # z-coordinate (in base frame) for scanning nominal first cone location
+CONE_TOP_TO_TOOL_DIST_FOR_SCAN = .491  # Offset in cone-axis direction between cone top and tool flange during scan
+CONE_TOP_TO_TOOL_DIST_FOR_PICK = .159  # Offset in cone-axis direction between cone top and tool flange when actuator grasps cone
+NOMINAL_FIRST_CONE_SCAN_X = -.712  # x-coordinate (in base frame) for scanning nominal first cone location
+NOMINAL_FIRST_CONE_SCAN_Y = .371  # y-coordinate (in base frame) for scanning nominal first cone location
+NOMINAL_FIRST_CONE_SCAN_Z = BOTTOM_CONE_HEIGHT + CONE_TOP_TO_TOOL_DIST_FOR_SCAN + (NUM_LAYERS-1) * PALLET_LAYER_HEIGHT  # z-coordinate (in base frame) for scanning nominal first cone location
 NOMINAL_FIRST_CONE_SCAN_POSE = np.array([NOMINAL_FIRST_CONE_SCAN_X, NOMINAL_FIRST_CONE_SCAN_Y, NOMINAL_FIRST_CONE_SCAN_Z, 2.2214, 0.0, -2.2214])  # Pose for camera over first spool
-PICK_MOVE = [.372, (P_C_T[1]-P_A_T[1])[0], (P_C_T[2]-P_A_T[2])[0]]  # Movement (in actuator frame) from spool-centered-in-camera to grasping spool
-#PICK_MOVE = [.372, -.061, .044]  # Movement (in actuator frame) from spool-centered-in-camera to grasping spool
+NOMINAL_PALLET_THETA = math.pi  # Angle from robot-base x direction to pallet x direction (row direction)
+PICK_MOVE = [CONE_TOP_TO_TOOL_DIST_FOR_SCAN - CONE_TOP_TO_TOOL_DIST_FOR_PICK,
+             (P_C_T[1]-P_A_T[1])[0],
+             (P_C_T[2]-P_A_T[2])[0]]  # Movement (in tool frame) from spool-centered-in-camera to grasping spool
+
+CONE_TUBE_LENGTH = .286  # Length of cardboard cone tube, only used for this check MQM 190527
+if CONE_TUBE_LENGTH > PICK_MOVE[0]:
+    print("Let's make the pick scanning height be at least one cone length over pallet, shall we?")
+    sys.exit()
 
 # AprilTag estimate seems to be off.  Here are translation corrections.
 CAMERA_X_FUDGE_FACTOR = .015  # m difference between actual x-direction tag pose and reported value
 CAMERA_Y_FUDGE_FACTOR = .015
 CAMERA_Z_FUDGE_FACTOR = .015
-
-# Poses
-PEG_SCAN_POSE = np.array([-.750, -.026, .56, .871, -1.48, -1.64])  # Pose for camera viewing pegs
-PEG_SCAN_JOINT = [math.radians(x) for x in [11, -84, -113, -153, -134, -172]]
-INTERMEDIATE_POSE = np.array([.371, .245, .419, 4.16, -.85, -.73])  # Pose between peg_scan and spool_scan
-BASE_SPOOL_Z = -.56390  # z-coordinate of bottom layer of spools
-SPOOL_OFFSET_Z = .31204  # z-direction distance between layers of spools
-INTERMEDIATE_JOINT = [math.radians(x) for x in [108, -47, -111, -220, -54, -90]]
-HOME_JOINT = [math.radians(x) for x in [-180, -90, -90, -180, -90, -90]]
-OVER_JOINT = [math.radians(x) for x in [70, -23, -119, -200, -98, -161]]
 
 # Max allowable norm of joint speeds (in rad/s) to be considered stopped (not really useful, see wait_for_robot_to_stop())
 JOINT_SPEEDS_NORM_THRESHOLD = .01
@@ -261,6 +260,8 @@ def visual_servoing(this_cone_scan_pose):
 
 
 if __name__ == "__main__":
+    HOME_JOINT = [math.radians(x) for x in [-180, -90, -90, -180, -90, -90]]
+
     # Connect to server providing machine vision for peg poses and spool circles
     print('Connecting to machine-vision server')
     vision_context = zmq.Context()
@@ -284,25 +285,40 @@ if __name__ == "__main__":
     send_robot_msg(HOME_JOINT, "1")
     wait_for_robot_to_stop()
 
-    print("movej to NOMINAL_FIRST_CONE_SCAN_POSE")
-    send_robot_msg(NOMINAL_FIRST_CONE_SCAN_POSE, "2")
-    wait_for_robot_to_stop()
+    # Pick all the cones
+    for i in range(NUM_LAYERS):
+        for j in range(NUM_COLS):
+            for k in range(NUM_ROWS):
+                # Calculate offsets in pallet directions
+                this_vertical_offset = -PALLET_LAYER_HEIGHT * i
+                this_row_dir_offset = CONE_SPACING * j
+                this_col_dir_offset = CONE_SPACING * k
 
-    print("entering visual_servoing")
-    visual_servoing_result = visual_servoing(NOMINAL_FIRST_CONE_SCAN_POSE)
-    print("visual_servoing_result = {0}".format(visual_servoing_result))
+                # Create pose for starting VS routine for current cone
+                this_scan_pose = np.copy(NOMINAL_FIRST_CONE_SCAN_POSE)
+                this_scan_pose[0] += math.cos(NOMINAL_PALLET_THETA) * this_row_dir_offset + math.sin(NOMINAL_PALLET_THETA) * this_col_dir_offset
+                this_scan_pose[1] += math.cos(NOMINAL_PALLET_THETA) * this_col_dir_offset + math.sin(NOMINAL_PALLET_THETA) * this_row_dir_offset
+                this_scan_pose[2] += this_vertical_offset
 
-    if 1 == visual_servoing_result:
-        #input("Visual servoing is complete.  Press Enter to continue")
-        send_robot_msg(PICK_MOVE, "1")  # Initiate pick routine
-        input("Pick move is complete.  Press Enter to continue")
-        wait_for_robot_to_stop()
-        send_robot_msg(HOME_JOINT, "1")
-        wait_for_robot_to_stop()
-    else:
-        print("No target for visual servoing")
-        sys.exit()
-        
+                # Move the robot to scan pose (start VS pose)
+                print("movej to offset scan pose")
+                send_robot_msg(this_scan_pose, "2")
+                wait_for_robot_to_stop()
+
+                # Visual servoing to get cone axis and camera optical axis coincident
+                print("entering visual_servoing")
+                visual_servoing_result = visual_servoing(NOMINAL_FIRST_CONE_SCAN_POSE)
+                print("visual_servoing_result = {0}".format(visual_servoing_result))
+                
+                if 1 == visual_servoing_result:
+                    #input("Visual servoing is complete.  Press Enter to continue")
+                    send_robot_msg(PICK_MOVE, "1")  # Initiate pick routine
+                    wait_for_robot_to_stop()
+                    send_robot_msg(HOME_JOINT, "1")
+                    wait_for_robot_to_stop()
+                else:
+                    print("No target for visual servoing")
+                    sys.exit()
 
     
     close_connections()
