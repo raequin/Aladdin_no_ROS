@@ -6,8 +6,11 @@ import sys
 import time
 import zmq
 
-
+#
 # "Constants"
+#
+
+# Values used by cone-pick machine vision
 IMAGE_LEFT = 0
 IMAGE_WIDTH = 640
 IMAGE_TOP = 0
@@ -18,10 +21,12 @@ CIRCLE_ERROR_TOLERANCE = 8  # Acceptable image error norm, in pixels
 CIRCLE_RADIUS_MIN = 35
 CIRCLE_RADIUS_MAX = 85
 PROPORTIONAL_VS_GAIN = 1/2000  # Convert error in pixels to m (sort of)
+PICK_MOVE = [.372, -.052, .04]  # Movement (in actuator frame) from spool-centered-in-camera to grasping spool
+
+# AprilTag estimate seems to be off.  Here are translation corrections.
 CAMERA_X_FUDGE_FACTOR = .015  # m difference between actual x-direction tag pose and reported value
 CAMERA_Y_FUDGE_FACTOR = .015
-CAMERA_Z_FUDGE_FACTOR = .015#.035
-PICK_MOVE = [.372, -.052, .04]
+CAMERA_Z_FUDGE_FACTOR = .015
 
 # Transformation from camera to tool flange
 R_TC = np.array([[0, 0, 1],
@@ -40,6 +45,7 @@ T_TA = np.concatenate((np.concatenate((R_TA, P_A_T), axis=1), np.array([[0, 0, 0
 # Transformation to actuator from tool flange
 T_AT = np.concatenate((np.concatenate((R_TA.T, -R_TA.T @ P_A_T), axis=1), np.array([[0, 0, 0, 1]])))
 
+# Poses
 PEG_SCAN_POSE = np.array([-.750, -.026, .56, .871, -1.48, -1.64])  # Pose for camera viewing pegs
 PEG_SCAN_JOINT = [math.radians(x) for x in [11, -84, -113, -153, -134, -172]]
 SPOOL_SCAN_POSE = np.array([-.56, .3, -.01, 2.2214, 0.0, -2.2214])  # Pose for camera over first spool
@@ -50,20 +56,13 @@ INTERMEDIATE_JOINT = [math.radians(x) for x in [108, -47, -111, -220, -54, -90]]
 HOME_JOINT = [math.radians(x) for x in [-180, -90, -90, -180, -90, -90]]
 OVER_JOINT = [math.radians(x) for x in [70, -23, -119, -200, -98, -161]]
 
-#PICK_TRANSLATION = .375  # Distance (in m) for tool to move along spool axis
-#PLACE_TRANSLATION = .1  # Distance (in m) for tool to move along peg axis
-JOINT_SPEEDS_NORM_THRESHOLD = .01  # Max allowable norm of joint speeds (in rad/s)
+# Max allowable norm of joint speeds (in rad/s) to be considered stopped (not really useful, see wait_for_robot_to_stop())
+JOINT_SPEEDS_NORM_THRESHOLD = .01
 
-global_theta = 0
+global_theta = 0  # Using a global variable for some reason (laziness?)
 
 
 def test_tag(T_CP, T_BA):
-    '''
-    R_PA_goal = np.array([[0, 0, -1],
-                     [0, 1, 0],
-                     [1, 0, 0]])    
-    P_A_P_goal = np.array([[0, 0, -.1]]).T
-    '''
     R_PA_goal = np.identity(3)
     P_A_P_goal = np.array([[-.1, 0, 0]]).T
     
@@ -119,12 +118,7 @@ def test_place(T_CP, T_BA_image):
     place_pose = np.array([T_BA_place[0,3], T_BA_place[1,3], T_BA_place[2,3], m[0], m[1], m[2]])
     send_robot_msg(place_pose, "3")  # MoveL
     wait_for_robot_to_stop()
-    '''
-    send_robot_msg(a2_pose, "3")
-    wait_for_robot_to_stop()
-    send_robot_msg(a1_pose, "3")
-    wait_for_robot_to_stop()
-    '''
+    
     send_robot_msg([0], "")  # Release spool
     wait_for_robot_to_stop()
 
@@ -182,28 +176,7 @@ def calc_axis_angle(R):
     theta = math.acos(c)
 
     return [mx*theta, my*theta, mz*theta]
-'''
-def calc_axis_angle(R):
-    c = (R[0,0]+R[1,1]+R[2,2]-1) / 2
-    if 0 < R[2,1]-R[1,2]:
-        smx = 1
-    else:
-        smx = -1
-    if 0 < R[0,2]-R[2,0]:
-        smy = 1
-    else:
-        smy = -1
-    if 0 < R[1,0]-R[0,1]:
-        smz = 1
-    else:
-        smz = -1
-        
-    mx = smx * math.sqrt((R[0,0]-c) / (1 - c))
-    my = smy * math.sqrt((R[1,1]-c) / (1 - c))
-    mz = smz * math.sqrt((R[2,2]-c) / (1 - c))
 
-    return [mx, my, mz]
-''' 
 
 def close_connections():
     robot_connection.close()
@@ -281,9 +254,11 @@ def get_robot_joint_speeds():
     return receive_robot_message(False)
 
 
+#
 # Ensure robot has stopped moving
 # It seems this function is uncessary because the robot will not send string
 # until it has stopped motion command
+#
 def wait_for_robot_to_stop():
     joint_speeds = np.array(get_robot_joint_speeds())
     print(np.linalg.norm(joint_speeds))
@@ -294,6 +269,7 @@ def wait_for_robot_to_stop():
 
 #
 # The message convention is that c can be either 1, 2, or 3
+# NOTE: THE FOLLOWING DESCRIPTION NEEDS TO BE UPDATED (MQM 190527)
 # If 6 == len(x) then c corresponds to 1:movej in joint coords, 2:movej in pose coords, 3:movel
 # If 1 == len(x) then c corresponds to 1:pick or 2:place
 #
@@ -301,7 +277,6 @@ def send_robot_msg(x, c):
     string_for_robot = ','.join(str(e) for e in x)  # Surely a terrible method for sending list of floats
     string_for_robot = "(" + string_for_robot + "," + c + ")"
     print("Sending this message to robot:\n" + string_for_robot + "\n")
-    #robot_connection.send(b"(10)")
     robot_connection.send(string_for_robot.encode())
 
 
@@ -343,7 +318,6 @@ def visual_servoing():
                 print("Error vector in robot base frame:")
                 print(robot_error_vec_B)
                 desired_robot_pose = [T_BA[0,3]+robot_error_vec_B[0,0], T_BA[1,3]+robot_error_vec_B[1,0], SPOOL_SCAN_POSE[2], SPOOL_SCAN_POSE[3], SPOOL_SCAN_POSE[4], SPOOL_SCAN_POSE[5]]
-#                desired_robot_pose = [curr_pose[0]+robot_error_vec_B[0,0], curr_pose[1]+robot_error_vec_B[1,0], SPOOL_SCAN_POSE[2], SPOOL_SCAN_POSE[3], SPOOL_SCAN_POSE[4], SPOOL_SCAN_POSE[5]]
                 send_robot_msg(desired_robot_pose, "3")
 
             else:
@@ -391,9 +365,7 @@ if __name__ == "__main__":
     print("poses found:")
     print(poses_list)
 
-    #
-    # For now assume only one tag found
-    #
+    # For now assume only one tag found per image
     R_CP = np.array(poses_list[0:9]).reshape(3,3)
     P_P_C = np.array(poses_list[9:12]).reshape(3,1)
     P_P_C[0,0] = P_P_C[0,0] + CAMERA_X_FUDGE_FACTOR
