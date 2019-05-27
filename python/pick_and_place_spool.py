@@ -10,24 +10,6 @@ import zmq
 # "Constants"
 #
 
-# Values used by cone-pick machine vision
-IMAGE_LEFT = 0
-IMAGE_WIDTH = 640
-IMAGE_TOP = 0
-IMAGE_HEIGHT = 512
-IMAGE_CENTER_U = IMAGE_WIDTH / 2
-IMAGE_CENTER_V = IMAGE_HEIGHT / 2
-CIRCLE_ERROR_TOLERANCE = 8  # Acceptable image error norm, in pixels
-CIRCLE_RADIUS_MIN = 35
-CIRCLE_RADIUS_MAX = 85
-PROPORTIONAL_VS_GAIN = 1/2000  # Convert error in pixels to m (sort of)
-PICK_MOVE = [.372, -.052, .04]  # Movement (in actuator frame) from spool-centered-in-camera to grasping spool
-
-# AprilTag estimate seems to be off.  Here are translation corrections.
-CAMERA_X_FUDGE_FACTOR = .015  # m difference between actual x-direction tag pose and reported value
-CAMERA_Y_FUDGE_FACTOR = .015
-CAMERA_Z_FUDGE_FACTOR = .015
-
 # Transformation from camera to tool flange
 R_TC = np.array([[0, 0, 1],
                  [0, 1, 0],
@@ -45,10 +27,41 @@ T_TA = np.concatenate((np.concatenate((R_TA, P_A_T), axis=1), np.array([[0, 0, 0
 # Transformation to actuator from tool flange
 T_AT = np.concatenate((np.concatenate((R_TA.T, -R_TA.T @ P_A_T), axis=1), np.array([[0, 0, 0, 1]])))
 
+# Values used by cone-pick machine vision
+IMAGE_LEFT = 0
+IMAGE_WIDTH = 640
+IMAGE_TOP = 0
+IMAGE_HEIGHT = 512
+IMAGE_CENTER_U = IMAGE_WIDTH / 2
+IMAGE_CENTER_V = IMAGE_HEIGHT / 2
+CIRCLE_ERROR_TOLERANCE = 8  # Acceptable image error norm, in pixels
+CIRCLE_RADIUS_MIN = 45
+CIRCLE_RADIUS_MAX = 75
+PROPORTIONAL_VS_GAIN = 1/2000  # Convert error in pixels to m (sort of)
+
+# Values used by cone-pick routine
+NUM_ROWS = 4  # How many cones along one axis of pallet
+NUM_COLS = 2  # How many cones along the other axis of pallet
+NUM_LAYERS = 1  # How many layers of cones on the pallet
+CONE_SPACING = .29  # Distance from cone center to cone center (m)
+PALLET_LAYER_HEIGHT = .32  # Vertical distance from top of one cone layer to next
+BOTTOM_CONE_HEIGHT = -.541  # z-coordinate of cone-tube top in robot base frame
+CONE_TOP_TO_TOOL_DIST = .531  # Offset in cone-axis direction between cone top and tool flange during scan
+NOMINAL_FIRST_CONE_SCAN_X = -.735  # x-coordinate (in base frame) for scanning nominal first cone location
+NOMINAL_FIRST_CONE_SCAN_Y = .213  # y-coordinate (in base frame) for scanning nominal first cone location
+NOMINAL_FIRST_CONE_SCAN_Z = BOTTOM_CONE_HEIGHT + CONE_TOP_TO_TOOL_DIST + (NUM_LAYERS-1) * PALLET_LAYER_HEIGHT  # z-coordinate (in base frame) for scanning nominal first cone location
+NOMINAL_FIRST_CONE_SCAN_POSE = np.array([NOMINAL_FIRST_CONE_SCAN_X, NOMINAL_FIRST_CONE_SCAN_Y, NOMINAL_FIRST_CONE_SCAN_Z, 2.2214, 0.0, -2.2214])  # Pose for camera over first spool
+PICK_MOVE = [.372, (P_C_T[1]-P_A_T[1])[0], (P_C_T[2]-P_A_T[2])[0]]  # Movement (in actuator frame) from spool-centered-in-camera to grasping spool
+#PICK_MOVE = [.372, -.061, .044]  # Movement (in actuator frame) from spool-centered-in-camera to grasping spool
+
+# AprilTag estimate seems to be off.  Here are translation corrections.
+CAMERA_X_FUDGE_FACTOR = .015  # m difference between actual x-direction tag pose and reported value
+CAMERA_Y_FUDGE_FACTOR = .015
+CAMERA_Z_FUDGE_FACTOR = .015
+
 # Poses
 PEG_SCAN_POSE = np.array([-.750, -.026, .56, .871, -1.48, -1.64])  # Pose for camera viewing pegs
 PEG_SCAN_JOINT = [math.radians(x) for x in [11, -84, -113, -153, -134, -172]]
-SPOOL_SCAN_POSE = np.array([-.56, .3, -.01, 2.2214, 0.0, -2.2214])  # Pose for camera over first spool
 INTERMEDIATE_POSE = np.array([.371, .245, .419, 4.16, -.85, -.73])  # Pose between peg_scan and spool_scan
 BASE_SPOOL_Z = -.56390  # z-coordinate of bottom layer of spools
 SPOOL_OFFSET_Z = .31204  # z-direction distance between layers of spools
@@ -60,95 +73,6 @@ OVER_JOINT = [math.radians(x) for x in [70, -23, -119, -200, -98, -161]]
 JOINT_SPEEDS_NORM_THRESHOLD = .01
 
 global_theta = 0  # Using a global variable for some reason (laziness?)
-
-
-def test_tag(T_CP, T_BA):
-    R_PA_goal = np.identity(3)
-    P_A_P_goal = np.array([[-.1, 0, 0]]).T
-    
-    T_PA_goal = np.concatenate((np.concatenate((R_PA_goal, P_A_P_goal), axis=1), np.array([[0, 0, 0, 1]])))
-
-    T_BA_goal = T_BA @ T_AT @ T_TC @ T_CP @ T_PA_goal
-    print(T_BA_goal)
-
-    m = calc_axis_angle(T_BA_goal[0:3, 0:3])
-    test_pose = np.array([T_BA_goal[0,3], T_BA_goal[1,3], T_BA_goal[2,3], m[0], m[1], m[2]])
-
-    send_robot_msg(test_pose, "3")
-
-
-def test_place(T_CP, T_BA_image):
-    R_PA_goal = np.array([[-1, 0, 0],
-                          [0, -1, 0],
-                          [0, 0, 1]])
-
-    d_fork_insertion = .105
-    d_tube_length = .29
-    d_peg_lip = .113
-    testing_fudge_distance = 0
-    d_center_axis = .01
-    d_peg_rib_offset = .0015
-    d_approach_clearance = .025
-    d_lateral_move = .18
-    d_place_drop = .015  # After releasing spool, move this distance in base -z-direction
-    
-    P_A_P_a1 = np.array([[d_peg_lip+d_approach_clearance+d_tube_length-d_fork_insertion+testing_fudge_distance, -d_center_axis, d_peg_rib_offset-d_lateral_move]]).T
-    P_A_P_a2 = np.array([[d_peg_lip+d_approach_clearance+d_tube_length-d_fork_insertion+testing_fudge_distance, -d_center_axis, d_peg_rib_offset]]).T
-    P_A_P_place = np.array([[d_peg_lip-d_fork_insertion+testing_fudge_distance, -d_center_axis, d_peg_rib_offset]]).T
-    
-    T_PA_a1 = np.concatenate((np.concatenate((R_PA_goal, P_A_P_a1), axis=1), np.array([[0, 0, 0, 1]])))
-    T_PA_a2 = np.concatenate((np.concatenate((R_PA_goal, P_A_P_a2), axis=1), np.array([[0, 0, 0, 1]])))
-    T_PA_place = np.concatenate((np.concatenate((R_PA_goal, P_A_P_place), axis=1), np.array([[0, 0, 0, 1]])))
-
-    T_BA_a1 = T_BA_image @ T_AT @ T_TC @ T_CP @ T_PA_a1
-    T_BA_a2 = T_BA_image @ T_AT @ T_TC @ T_CP @ T_PA_a2
-    T_BA_place = T_BA_image @ T_AT @ T_TC @ T_CP @ T_PA_place
-
-    m = calc_axis_angle(T_BA_a1[0:3, 0:3])
-    a1_pose = np.array([T_BA_a1[0,3], T_BA_a1[1,3], T_BA_a1[2,3], m[0], m[1], m[2]])
-    send_robot_msg(a1_pose, "2")  # MoveJ
-    wait_for_robot_to_stop()
-    
-    m = calc_axis_angle(T_BA_a2[0:3, 0:3])
-    a2_pose = np.array([T_BA_a2[0,3], T_BA_a2[1,3], T_BA_a2[2,3], m[0], m[1], m[2]])
-    send_robot_msg(a2_pose, "3")  # MoveL
-    wait_for_robot_to_stop()
-    
-    m = calc_axis_angle(T_BA_place[0:3, 0:3])
-    place_pose = np.array([T_BA_place[0,3], T_BA_place[1,3], T_BA_place[2,3], m[0], m[1], m[2]])
-    send_robot_msg(place_pose, "3")  # MoveL
-    wait_for_robot_to_stop()
-    
-    send_robot_msg([0], "")  # Release spool
-    wait_for_robot_to_stop()
-
-    # Move in base -z-direction then retract actuator
-    P_A_P_place = np.array([[d_peg_lip-d_fork_insertion+testing_fudge_distance, -d_center_axis+d_place_drop, d_peg_rib_offset]]).T
-    P_A_P_a2 = np.array([[d_peg_lip+d_approach_clearance+d_tube_length-d_fork_insertion+testing_fudge_distance, -d_center_axis+d_place_drop, d_peg_rib_offset]]).T
-    P_A_P_a1 = np.array([[d_peg_lip+d_approach_clearance+d_tube_length-d_fork_insertion+testing_fudge_distance, -d_center_axis+d_place_drop, d_peg_rib_offset-d_lateral_move]]).T
-    
-    T_PA_place = np.concatenate((np.concatenate((R_PA_goal, P_A_P_place), axis=1), np.array([[0, 0, 0, 1]])))
-    T_PA_a2 = np.concatenate((np.concatenate((R_PA_goal, P_A_P_a2), axis=1), np.array([[0, 0, 0, 1]])))
-    T_PA_a1 = np.concatenate((np.concatenate((R_PA_goal, P_A_P_a1), axis=1), np.array([[0, 0, 0, 1]])))
-
-    T_BA_place = T_BA_image @ T_AT @ T_TC @ T_CP @ T_PA_place
-    T_BA_a2 = T_BA_image @ T_AT @ T_TC @ T_CP @ T_PA_a2
-    T_BA_a1 = T_BA_image @ T_AT @ T_TC @ T_CP @ T_PA_a1
-    
-    m = calc_axis_angle(T_BA_place[0:3, 0:3])
-    place_pose = np.array([T_BA_place[0,3], T_BA_place[1,3], T_BA_place[2,3], m[0], m[1], m[2]])
-    send_robot_msg(place_pose, "3")  # MoveL
-    wait_for_robot_to_stop()
-    
-    m = calc_axis_angle(T_BA_a2[0:3, 0:3])
-    a2_pose = np.array([T_BA_a2[0,3], T_BA_a2[1,3], T_BA_a2[2,3], m[0], m[1], m[2]])
-    send_robot_msg(a2_pose, "3")  # MoveL
-    wait_for_robot_to_stop()
-
-    m = calc_axis_angle(T_BA_a1[0:3, 0:3])
-    a1_pose = np.array([T_BA_a1[0,3], T_BA_a1[1,3], T_BA_a1[2,3], m[0], m[1], m[2]])
-    send_robot_msg(a1_pose, "3")  # MoveL
-    wait_for_robot_to_stop()
 
 
 def calc_axis_angle(R):
@@ -226,7 +150,9 @@ def receive_robot_message(is_waiting_for_pose):
     return ret
 
 
+#
 # Returns homogenous transformation matrix to robot base from robot TCP
+#
 def get_robot_pose():
     send_robot_msg([1], "1")  # Send two ones to robot for pose request
     print("Awaiting robot coordinates")
@@ -284,7 +210,7 @@ def send_robot_msg(x, c):
 # Returns 0 if no target for servoing
 # Returns 1 once target reached
 #
-def visual_servoing():
+def visual_servoing(this_cone_scan_pose):
     while True:
         #input("Press Enter to continue")
         wait_for_robot_to_stop()
@@ -317,7 +243,8 @@ def visual_servoing():
                 robot_error_vec_B = T_BA[0:3, 0:3] @ robot_error_vec_T
                 print("Error vector in robot base frame:")
                 print(robot_error_vec_B)
-                desired_robot_pose = [T_BA[0,3]+robot_error_vec_B[0,0], T_BA[1,3]+robot_error_vec_B[1,0], SPOOL_SCAN_POSE[2], SPOOL_SCAN_POSE[3], SPOOL_SCAN_POSE[4], SPOOL_SCAN_POSE[5]]
+                desired_robot_pose = [T_BA[0,3]+robot_error_vec_B[0,0], T_BA[1,3]+robot_error_vec_B[1,0], this_cone_scan_pose[2],
+                                      this_cone_scan_pose[3], this_cone_scan_pose[4], this_cone_scan_pose[5]]
                 send_robot_msg(desired_robot_pose, "3")
 
             else:
@@ -353,74 +280,29 @@ if __name__ == "__main__":
     for x in range(6):  # Flush old messages?
         get_robot_pose()
 
-    print("move to PEG_SCAN")
-#    send_robot_msg(PEG_SCAN_POSE, "3")
-    send_robot_msg(PEG_SCAN_JOINT, "1")  # Movej to home pose in joint coordinates
+    print("movej to HOME_JOINT")
+    send_robot_msg(HOME_JOINT, "1")
     wait_for_robot_to_stop()
 
-    T_BA = get_robot_pose()  # Get current transformation to base from TCP
-    print(T_BA)
-    print("getting peg poses")
-    poses_list = get_tag_poses()
-    print("poses found:")
-    print(poses_list)
-
-    # For now assume only one tag found per image
-    R_CP = np.array(poses_list[0:9]).reshape(3,3)
-    P_P_C = np.array(poses_list[9:12]).reshape(3,1)
-    P_P_C[0,0] = P_P_C[0,0] + CAMERA_X_FUDGE_FACTOR
-    P_P_C[1,0] = P_P_C[1,0] + CAMERA_Y_FUDGE_FACTOR
-    P_P_C[2,0] = P_P_C[2,0] + CAMERA_Z_FUDGE_FACTOR
-    T_CP = np.concatenate((np.concatenate((R_CP, P_P_C), axis=1), np.array([[0, 0, 0, 1]])))
-    print(T_CP)
-
-    print("movel to INTERMEDIATE_POSE")
-    send_robot_msg(INTERMEDIATE_POSE, "3")
-    wait_for_robot_to_stop()
-
-    print("movej to SPOOL_SCAN_POSE")
-    send_robot_msg(SPOOL_SCAN_POSE, "2")
+    print("movej to NOMINAL_FIRST_CONE_SCAN_POSE")
+    send_robot_msg(NOMINAL_FIRST_CONE_SCAN_POSE, "2")
     wait_for_robot_to_stop()
 
     print("entering visual_servoing")
-    visual_servoing_result = visual_servoing()
+    visual_servoing_result = visual_servoing(NOMINAL_FIRST_CONE_SCAN_POSE)
     print("visual_servoing_result = {0}".format(visual_servoing_result))
 
     if 1 == visual_servoing_result:
         #input("Visual servoing is complete.  Press Enter to continue")
         send_robot_msg(PICK_MOVE, "1")  # Initiate pick routine
+        input("Pick move is complete.  Press Enter to continue")
+        wait_for_robot_to_stop()
+        send_robot_msg(HOME_JOINT, "1")
+        wait_for_robot_to_stop()
     else:
         print("No target for visual servoing")
         sys.exit()
         
 
-    POST_PICK_JOINT_01 = [math.radians(x) for x in [153, -106, -119, -135, -165, -90]]
-    POST_PICK_JOINT_02 = [math.radians(x) for x in [153, -35, -143, -135, -165, -80]]
-    POST_PICK_JOINT_03 = [math.radians(x) for x in [24, -35, -143, -135, -165, -80]]
-    POST_PICK_JOINT_04 = [math.radians(x) for x in [24, -35, -143, -135, -30, -80]]
-    POST_PICK_JOINT_05 = [math.radians(x) for x in [24, -76, -107, -135, -30, -80]]
-    
-#    send_robot_msg(POST_PICK_JOINT_01, "1")
-#    wait_for_robot_to_stop()
-    send_robot_msg(POST_PICK_JOINT_02, "1")
-    wait_for_robot_to_stop()
-    send_robot_msg(POST_PICK_JOINT_03, "1")
-    wait_for_robot_to_stop()
-    send_robot_msg(POST_PICK_JOINT_04, "1")
-    wait_for_robot_to_stop()
-    send_robot_msg(POST_PICK_JOINT_05, "1")
-    wait_for_robot_to_stop()
-
-#    print("move to PEG_SCAN")
-#    send_robot_msg(PEG_SCAN_JOINT, "1")  # Movej to home pose in joint coordinates
-#    wait_for_robot_to_stop()
-    #test_tag(T_CP, T_BA)
-    test_place(T_CP, T_BA)
-
-    send_robot_msg(POST_PICK_JOINT_05, "1")
-    wait_for_robot_to_stop()
     
     close_connections()
-        
-    #time.sleep(1)
-# Testing git
