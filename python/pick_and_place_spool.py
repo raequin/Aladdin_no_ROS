@@ -25,7 +25,7 @@ P_A_T = np.array([[.205, 0, .112]]).T
 T_TA = np.concatenate((np.concatenate((R_TA, P_A_T), axis=1), np.array([[0, 0, 0, 1]])))
 
 # Transformation to actuator from tool flange
-T_AT = np.concatenate((np.concatenate((R_TA.T, -R_TA.T @ P_A_T), axis=1), np.array([[0, 0, 0, 1]])))
+T_AT = np.concatenate((np.concatenate((R_TA.T, np.matmul(-R_TA.T, P_A_T)), axis=1), np.array([[0, 0, 0, 1]])))
 
 # Values used by cone-pick machine vision
 IMAGE_LEFT = 0
@@ -238,8 +238,8 @@ def visual_servoing(this_cone_scan_pose):
             image_error = np.array([circles_list[central_circle_index] - IMAGE_CENTER_U, circles_list[central_circle_index + 1] - IMAGE_CENTER_V, 0])[:, np.newaxis]
             print("error_u = {0}\terror_v = {1}\tfor circle {2}\n".format(image_error[0], image_error[1], central_circle_index/3))
             if CIRCLE_ERROR_TOLERANCE < np.linalg.norm(image_error):
-                robot_error_vec_T = (R_TC @ image_error) * PROPORTIONAL_VS_GAIN
-                robot_error_vec_B = T_BA[0:3, 0:3] @ robot_error_vec_T
+                robot_error_vec_T = np.matmul(R_TC, image_error) * PROPORTIONAL_VS_GAIN  # Desired robot offset in tool frame
+                robot_error_vec_B = np.matmul(T_BA[0:3, 0:3], robot_error_vec_T)  # Desired robot offset in base frame
                 print("Error vector in robot base frame:")
                 print(robot_error_vec_B)
                 desired_robot_pose = [T_BA[0,3]+robot_error_vec_B[0,0], T_BA[1,3]+robot_error_vec_B[1,0], this_cone_scan_pose[2],
