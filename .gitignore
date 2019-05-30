@@ -2,3 +2,4 @@
 lib/
 visionServer/build/
 \#*
+*_ignore_me_*

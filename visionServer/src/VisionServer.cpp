@@ -61,6 +61,22 @@ std::string GetPoses(Camera& camera_FlyCap, apriltag_detector_t *atdt, apriltag_
   frame = cv::Mat(cv::Size(m_ImageColor.GetCols(),m_ImageColor.GetRows()), CV_8UC3, (void*)m_ImageColor.GetData());
   cv::cvtColor(frame, gray, cv::COLOR_BGR2GRAY);
 
+  // Testing image save
+  std::vector<int> compression_params;
+  compression_params.push_back(CV_IMWRITE_PNG_COMPRESSION);
+  compression_params.push_back(0);
+
+  try {
+    cv::imwrite("testWrite.png", frame, compression_params);
+  }
+  catch (std::runtime_error& ex) {
+    fprintf(stderr, "Exception converting image to PNG format: %s\n", ex.what());
+    return "hello";
+  }
+  
+  fprintf(stdout, "Saved PNG file with alpha data.\n");
+  
+
   // Make an image_u8_t header for the Mat data
   image_u8_t im = {.width = gray.cols, .height = gray.rows, .stride = gray.cols, .buf = gray.data};
 
@@ -152,6 +168,7 @@ std::string GetCircles(Camera& camera_FlyCap) {//, apriltag_detector_t *atdt, ap
   error_FlyCap = m_Image.Convert(PIXEL_FORMAT_BGR, &m_ImageColor);
 
   CvImg = new cv::Mat(cv::Size(m_ImageColor.GetCols(),m_ImageColor.GetRows()), CV_8UC3, (void*)m_ImageColor.GetData());
+
   cv::imshow("ptgrey_img", *CvImg);
   cv::waitKey(15);
   std::vector<std::array<float, 3>> spools_found = creelsense::FindSpools(*CvImg, true);

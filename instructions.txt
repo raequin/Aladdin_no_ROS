@@ -43,6 +43,9 @@ git clone https://github.com/AprilRobotics/apriltag.git
 cd opencv
 mkdir build && cd build
 cmake ..
+# The jobs flag could make the following command faster,
+# e.g., "make -j 8" to schedule up to eight jobs at once.
+# This applies to all "make" commands in this document.
 make
 cd ../../libzmq
 mkdir build && cd build
