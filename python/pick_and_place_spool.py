@@ -133,6 +133,19 @@ def get_tag_poses():
     return ret
 
 
+#
+# Because ease of development is deemed to be more valuable than performance,
+# this returns the path to an image saved on the drive instead of using shared memory  :-/
+#
+def get_image():
+    print("Sending request for image")
+    vision_socket.send(b"Request image")
+    msg = vision_socket.recv()
+    ret = msg.decode("utf-8")
+    
+    return ret
+
+
 def receive_robot_message(is_waiting_for_pose):
     msg = robot_connection.recv(1024)
     msg_str = msg.decode("utf-8")

@@ -61,22 +61,6 @@ std::string GetPoses(Camera& camera_FlyCap, apriltag_detector_t *atdt, apriltag_
   frame = cv::Mat(cv::Size(m_ImageColor.GetCols(),m_ImageColor.GetRows()), CV_8UC3, (void*)m_ImageColor.GetData());
   cv::cvtColor(frame, gray, cv::COLOR_BGR2GRAY);
 
-  // Testing image save
-  std::vector<int> compression_params;
-  compression_params.push_back(CV_IMWRITE_PNG_COMPRESSION);
-  compression_params.push_back(0);
-
-  try {
-    cv::imwrite("testWrite.png", frame, compression_params);
-  }
-  catch (std::runtime_error& ex) {
-    fprintf(stderr, "Exception converting image to PNG format: %s\n", ex.what());
-    return "hello";
-  }
-  
-  fprintf(stdout, "Saved PNG file with alpha data.\n");
-  
-
   // Make an image_u8_t header for the Mat data
   image_u8_t im = {.width = gray.cols, .height = gray.rows, .stride = gray.cols, .buf = gray.data};
 
@@ -153,14 +137,14 @@ std::string GetPoses(Camera& camera_FlyCap, apriltag_detector_t *atdt, apriltag_
 }
 
 
-std::string toString(float number){
+std::string toString(float number) {
     std::ostringstream buff;
     buff<<number;
     return buff.str();
 }
 
 
-std::string GetCircles(Camera& camera_FlyCap) {//, apriltag_detector_t *atdt, apriltag_detection_info_t atdit) {
+std::string GetCircles(Camera& camera_FlyCap) {
   Error error_FlyCap;
   Image m_Image, m_ImageColor;
   cv::Mat* CvImg = nullptr;
@@ -175,16 +159,16 @@ std::string GetCircles(Camera& camera_FlyCap) {//, apriltag_detector_t *atdt, ap
 
   //  Format return message  
   std::string ret = "";
-  for(int i(0); i<spools_found.size(); ++i){
+  for (int i(0); i<spools_found.size(); ++i) {
     ret += "[";
-    for(int j(0); j<3; ++j){
+    for (int j(0); j<3; ++j) {
       ret += toString(spools_found[i][j]);
-      if (j <2){
+      if (j <2) {
 	ret += ',';
       }
     }
     ret += "]";
-    if (i < spools_found.size()-1){
+    if (i < spools_found.size()-1) {
       ret +=  ",";
     }
   }
@@ -193,7 +177,34 @@ std::string GetCircles(Camera& camera_FlyCap) {//, apriltag_detector_t *atdt, ap
 }
 
 
-int main(int argc, char *argv[]){
+// Save an image and return the absolute path to it
+std::string GetImagePath(Camera& camera_FlyCap) {
+  std::string ret = "/home/mqm/Desktop/current_picture.png";
+  Error error_FlyCap;
+  Image m_Image, m_ImageColor;
+  cv::Mat frame, gray;
+  error_FlyCap = camera_FlyCap.RetrieveBuffer(&m_Image);
+  error_FlyCap = m_Image.Convert(PIXEL_FORMAT_BGR, &m_ImageColor);
+  frame = cv::Mat(cv::Size(m_ImageColor.GetCols(),m_ImageColor.GetRows()), CV_8UC3, (void*)m_ImageColor.GetData());
+  cv::cvtColor(frame, gray, cv::COLOR_BGR2GRAY);
+
+  std::vector<int> compression_params;
+  compression_params.push_back(CV_IMWRITE_PNG_COMPRESSION);
+  compression_params.push_back(0);
+
+  try {
+    cv::imwrite(ret, frame, compression_params);
+  }
+  catch (std::runtime_error& ex) {
+    fprintf(stderr, "Exception converting image to PNG format: %s\n", ex.what());
+    return "Error in GetImagePath";
+  }
+
+  return ret;
+}
+
+
+int main(int argc, char *argv[]) {
   std::ios_base::sync_with_stdio(false);
   std::cin.tie(NULL);
 
@@ -281,19 +292,18 @@ int main(int argc, char *argv[]){
     // Deal with request and create response string
     std::string response_str = "{";
 
-    if (0 == request_str.compare("Request peg poses")){
+    if (0 == request_str.compare("Request peg poses"))
       response_str += GetPoses(m_Cam, td, info) + "}";
       
-    } else if (0 == request_str.compare("Request spool circles")){
+    else if (0 == request_str.compare("Request spool circles"))
       response_str += GetCircles(m_Cam) + "}";
       
-    } else { // Did not recieve the right message      
-      response_str += "{\"Error\"}";
-      zmq::message_t reply(response_str.size());
-      memcpy(reply.data(), response_str.data(), response_str.size());
-      socket.send(reply);
-      continue;
-    }
+    else if (0 == request_str.compare("Request image"))
+      response_str = GetImagePath(m_Cam);
+
+    else // Did not recieve the right message      
+      response_str = "{\"Error\"}";
+
     std::cout << response_str << std::endl;
 
     //  Send reply back to client
