@@ -5,10 +5,11 @@
 #include "creel_tracker/CreelTracker.hpp"
 
 // OpenCV Headers
-#include "opencv2/core.hpp"
-#include "opencv2/imgproc.hpp"
-#include "opencv2/highgui.hpp"
+#include "opencv2/core/core.hpp"
+#include "opencv2/imgproc/imgproc.hpp"
+#include "opencv2/highgui/highgui.hpp"
 #include "opencv2/opencv.hpp"
+//#include "opencv2/imgcodecs.hpp"
 
 extern "C" {
 #include "apriltag.h"
@@ -180,6 +181,7 @@ std::string GetCircles(Camera& camera_FlyCap) {
 // Save an image and return the absolute path to it
 std::string GetImagePath(Camera& camera_FlyCap) {
   std::string ret = "/home/mqm/Desktop/current_picture.png";
+  
   Error error_FlyCap;
   Image m_Image, m_ImageColor;
   cv::Mat frame, gray;
@@ -189,8 +191,8 @@ std::string GetImagePath(Camera& camera_FlyCap) {
   cv::cvtColor(frame, gray, cv::COLOR_BGR2GRAY);
 
   std::vector<int> compression_params;
-  compression_params.push_back(CV_IMWRITE_PNG_COMPRESSION);
-  compression_params.push_back(0);
+  compression_params.push_back(cv::IMWRITE_PNG_COMPRESSION);
+  compression_params.push_back(0);  // 0--9, increasing value means increasing image compression
 
   try {
     cv::imwrite(ret, frame, compression_params);

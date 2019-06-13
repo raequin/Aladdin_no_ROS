@@ -134,10 +134,10 @@ def get_tag_poses():
 
 
 #
-# Because ease of development is deemed to be more valuable than performance,
-# this returns the path to an image saved on the drive instead of using shared memory  :-/
+# Because at this time, ease of development is deemed to be more valuable than performance,
+# get the path to an image saved on the drive instead of using shared memory  :-/
 #
-def get_image():
+def get_image_path():
     print("Sending request for image")
     vision_socket.send(b"Request image")
     msg = vision_socket.recv()

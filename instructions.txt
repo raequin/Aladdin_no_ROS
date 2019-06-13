@@ -35,22 +35,25 @@ To compile software
 # 1. Install appropriate pointgrey "flycapture" library
 
 ### Compile other libraries:
+sudo apt install libzmq3-dev
+
 # (from this folder)
 mkdir lib && cd lib
 git clone https://github.com/opencv/opencv.git -b 4.0.1
-git clone https://github.com/zeromq/libzmq.git -b v4.3.1
 git clone https://github.com/AprilRobotics/apriltag.git
 cd opencv
 mkdir build && cd build
 cmake ..
+
 # The jobs flag could make the following command faster,
 # e.g., "make -j 8" to schedule up to eight jobs at once.
 # This applies to all "make" commands in this document.
 make
-cd ../../libzmq
-mkdir build && cd build
-cmake ..
-make
+
+# It might be necessary to uninstall opencv if it was previously installed via packages
+# This would look like the following
+# sudo apt remove --purge libopencv-dev
+
 cd ../../apriltag
 mkdir build && cd build
 cmake ..

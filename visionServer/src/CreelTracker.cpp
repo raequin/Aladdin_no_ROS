@@ -15,45 +15,45 @@ std::vector<std::array<float, 3>> creelsense::FindSpools(cv::Mat& src, bool disp
   auto end = chrono::high_resolution_clock::now();
   auto start = chrono::high_resolution_clock::now();
 
-	if(src.empty()){
-		cout << "Error: image passed to FindSpools is empty.\n";
-		return ret;
-	}
-	if (src.rows > src.cols){
-		cv::rotate(src, src, cv::ROTATE_90_CLOCKWISE);
-	}
-	src.copyTo(plain);
-	aspect_ratio = (float)plain.rows / plain.cols;
-	cv::resize(plain, plain, cv::Size(640, (int)(aspect_ratio*640))); // make small for display
+  if(src.empty()){
+    cout << "Error: image passed to FindSpools is empty.\n";
+    return ret;
+  }
+  if (src.rows > src.cols){
+    cv::rotate(src, src, cv::ROTATE_90_CLOCKWISE);
+  }
+  src.copyTo(plain);
+  aspect_ratio = (float)plain.rows / plain.cols;
+  cv::resize(plain, plain, cv::Size(640, (int)(aspect_ratio*640))); // make small for display
 
-	cv::cvtColor(plain, gray, cv::COLOR_BGR2GRAY);
+  cv::cvtColor(plain, gray, cv::COLOR_BGR2GRAY);
 	
-	cv::meanStdDev(gray, meanvar, stdvar);
-	cout << -1  << '\t' << meanvar[0] << '\t' << stdvar[0] << '\n';
-	gray -= meanvar[0]-121;
+  cv::meanStdDev(gray, meanvar, stdvar);
+  cout << -1  << '\t' << meanvar[0] << '\t' << stdvar[0] << '\n';
+  gray -= meanvar[0]-121;
 	
-	double minVal; 
-	double maxVal; 
-	cv::Point minLoc; 
-	cv::Point maxLoc;
-	cv::minMaxLoc( gray, &minVal, &maxVal, &minLoc, &maxLoc );
-	cv::normalize(gray, gray, minVal, maxVal, cv::NORM_MINMAX);
+  double minVal; 
+  double maxVal; 
+  cv::Point minLoc; 
+  cv::Point maxLoc;
+  cv::minMaxLoc( gray, &minVal, &maxVal, &minLoc, &maxLoc );
+  cv::normalize(gray, gray, minVal, maxVal, cv::NORM_MINMAX);
 	
-	//cv::blur(gray, edges, cv::Size(3,3));
-	//~ gray.copyTo(edges);
+  //cv::blur(gray, edges, cv::Size(3,3));
+  //~ gray.copyTo(edges);
 
-	//~ cv::Canny(edges, edges, 45, 115, 3);
-	//~ for (int i(0); i<3; ++i){
-	  //~ cv::dilate(edges, edges, cv::getStructuringElement(cv::MORPH_ELLIPSE, cv::Size(3, 3)));
-	//~ }
- //~ for (int i(0); i<4; ++i){
-	  //~ cv::erode(edges, edges, cv::getStructuringElement(cv::MORPH_ELLIPSE, cv::Size(3, 3)));
-	//~ }
+  //~ cv::Canny(edges, edges, 45, 115, 3);
+  //~ for (int i(0); i<3; ++i){
+  //~ cv::dilate(edges, edges, cv::getStructuringElement(cv::MORPH_ELLIPSE, cv::Size(3, 3)));
+  //~ }
+  //~ for (int i(0); i<4; ++i){
+  //~ cv::erode(edges, edges, cv::getStructuringElement(cv::MORPH_ELLIPSE, cv::Size(3, 3)));
+  //~ }
   //~ if (display){
-    //~ end = chrono::high_resolution_clock::now();
-    //~ cout << "edges morphops: Elapsed time in seconds : " 
-		//~ << chrono::duration<double>(end - start).count()
-		//~ << " sec" << endl << endl;
+  //~ end = chrono::high_resolution_clock::now();
+  //~ cout << "edges morphops: Elapsed time in seconds : " 
+  //~ << chrono::duration<double>(end - start).count()
+  //~ << " sec" << endl << endl;
   //~ }
   
   //~ cv::imshow("edges", edges);
@@ -63,17 +63,17 @@ std::vector<std::array<float, 3>> creelsense::FindSpools(cv::Mat& src, bool disp
   cv::inRange(blob, thresh_low, thresh_high, blob);
   
   for (int i(0); i <5; ++i){
-  cv::dilate(blob, blob, cv::getStructuringElement(cv::MORPH_ELLIPSE, cv::Size(3, 3)));
+    cv::dilate(blob, blob, cv::getStructuringElement(cv::MORPH_ELLIPSE, cv::Size(3, 3)));
   }
-	for (int i(0); i <3; ++i){
-		cv::erode(blob, blob, cv::getStructuringElement(cv::MORPH_ELLIPSE, cv::Size(3, 3)));
-	}
+  for (int i(0); i <3; ++i){
+    cv::erode(blob, blob, cv::getStructuringElement(cv::MORPH_ELLIPSE, cv::Size(3, 3)));
+  }
   if (display){
     cv::imshow("blob", blob);
     end = chrono::high_resolution_clock::now();
     cout << "color_threshold morphops: Elapsed time in seconds : " 
-		<< chrono::duration<double>(end - start).count()
-		<< " sec" << endl;
+	 << chrono::duration<double>(end - start).count()
+	 << " sec" << endl;
   }
   
   contourOutput = blob.clone();
@@ -81,9 +81,9 @@ std::vector<std::array<float, 3>> creelsense::FindSpools(cv::Mat& src, bool disp
   
   for (size_t idx = 0; idx < contours.size(); idx++) {
     if (cv::contourArea(contours[idx]) < blob.rows/20*blob.cols/20)
-    {
-      continue; // skip small ones
-    }
+      {
+	continue; // skip small ones
+      }
 
     cv::convexHull(contours[idx], hull);
     convex_to_orig_area = cv::contourArea(contours[idx]) / cv::contourArea(hull);
@@ -95,13 +95,13 @@ std::vector<std::array<float, 3>> creelsense::FindSpools(cv::Mat& src, bool disp
     }
     
     //~ if (display){
-      //~ cout << "area/perimeter ratio" << cv::contourArea(contours[idx]) / cv::arcLength(contours[idx], true) << '\n';
+    //~ cout << "area/perimeter ratio" << cv::contourArea(contours[idx]) / cv::arcLength(contours[idx], true) << '\n';
     //~ }
     
     //~ area_perim_ratio = cv::contourArea(contours[idx]) / cv::arcLength(contours[idx], true);
     /*if (area_perim_ratio > 16 || area_perim_ratio < .65){
-    continue;
-    }*/
+      continue;
+      }*/
     
     // mean and std of blobs
     cv::minEnclosingCircle(contours[idx], center, radius);
@@ -140,10 +140,10 @@ std::vector<std::array<float, 3>> creelsense::FindSpools(cv::Mat& src, bool disp
     // mean and std of edge images (finds the lines of the yarn)
     //~ cv::meanStdDev(edges, meanvar, stdvar, mask);
     //~ if (display){
-      //~ cout << 3  << '\t' << meanvar[0] << '\t' << stdvar[0] << '\n';
+    //~ cout << 3  << '\t' << meanvar[0] << '\t' << stdvar[0] << '\n';
     //~ }
     //~ if (meanvar[0] < 10){
-      //~ continue;
+    //~ continue;
     //~ }
     
     //    ret.push_back(std::array<float, 3>{center.x / contourOutput.cols, center.y/contourOutput.rows, radius/contourOutput.cols});  // This is AG original.  Normalized values?
@@ -156,19 +156,19 @@ std::vector<std::array<float, 3>> creelsense::FindSpools(cv::Mat& src, bool disp
     
     // Pause after every image and draw a circle
     /*if (display){
-    cv::imshow("contourImage",gray);
-    cv::waitKey(0);
-    }//*/
+      cv::imshow("contourImage",gray);
+      cv::waitKey(0);
+      }//*/
   }
   if (display){
     end = chrono::high_resolution_clock::now();
     cout << "contour filtering: Elapsed time in seconds : " 
-		<< chrono::duration<double>(end - start).count()
-		<< " sec" << endl;
+	 << chrono::duration<double>(end - start).count()
+	 << " sec" << endl;
     cv::imshow("contourImage",gray);
     cv::waitKey(2);
     //~ cv::waitKey(0);
   }
     
-    return ret;
+  return ret;
 }

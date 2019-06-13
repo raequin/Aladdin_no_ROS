@@ -2,9 +2,10 @@
 #define CREEL_TRACKER_HPP
 
 // OpenCV Headers
-#include "opencv2/core.hpp"
-#include "opencv2/imgproc.hpp"
-#include "opencv2/highgui.hpp"
+#include "opencv2/core/core.hpp"
+#include "opencv2/imgproc/imgproc.hpp"
+#include "opencv2/opencv.hpp"
+#include "opencv2/highgui/highgui.hpp"
 
 // C++ Standard Libraries
 #include <chrono>

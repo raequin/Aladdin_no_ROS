@@ -12,7 +12,7 @@ import pdb
 dn.set_gpu(0)  # Use the first GPU
 net = dn.load_net("/home/mqm/Documents/computer/darknet/cfg/yolo-empty-test.cfg", "/home/mqm/Documents/computer/darknet/yolo-empty_19250.weights", 0)
 meta = dn.load_meta("/home/mqm/Documents/computer/darknet/cfg/empty.data")
-image_string = "/home/mqm/Documents/computer/darknet/data/photos_lab/c1.png"
+image_string = "/home/mqm/Documents/computer/darknet/data/photos_lab/c8.png"
 r = dn.detect(net, meta, image_string, thresh = 0.38)
 print r
 
