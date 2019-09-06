@@ -71,8 +71,11 @@ CAMERA_Z_FUDGE_FACTOR = .015
 # Max allowable norm of joint speeds (in rad/s) to be considered stopped (not really useful, see wait_for_robot_to_stop())
 JOINT_SPEEDS_NORM_THRESHOLD = .01
 
-global_theta = 0  # Using a global variable for some reason (laziness?)
 
+#
+# Methods
+#
+global_theta = 0  # Using a global variable for some reason (laziness?)
 
 def calc_axis_angle(R):
     c = (R[0,0]+R[1,1]+R[2,2]-1) / 2
@@ -162,10 +165,7 @@ def receive_robot_message(is_waiting_for_pose):
     return ret
 
 
-#
-# Returns homogenous transformation matrix to robot base from robot TCP
-#
-def get_robot_pose():
+def get_robot_pose():  # Returns homogenous transformation matrix to robot base from robot TCP
     send_robot_msg([1], "1")  # Send two ones to robot for pose request
     print("Awaiting robot coordinates")
 
@@ -272,6 +272,9 @@ def visual_servoing(this_cone_scan_pose):
             return 0
 
 
+#
+#  main
+#
 if __name__ == "__main__":
     HOME_JOINT = [math.radians(x) for x in [-180, -90, -90, -180, -90, -90]]
 
