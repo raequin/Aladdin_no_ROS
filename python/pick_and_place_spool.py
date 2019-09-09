@@ -83,6 +83,8 @@ JOINT_SPEEDS_NORM_THRESHOLD = .01
 global_theta = 0  # Using a global variable for some reason (laziness?)
 
 def calc_axis_angle(R):
+    # Method from "Kinematic Analysis of Robot Manipulators," by Duffy and Crane
+    '''
     print("R")
     print(R)
     c = (R[0,0]+R[1,1]+R[2,2]-1) / 2
@@ -90,7 +92,7 @@ def calc_axis_angle(R):
     if math.pi < global_theta or 0 > global_theta:
         c = -c
     print("c = {0}".format(c))
-        
+
     if 0 < R[2,1]-R[1,2]:
         smx = 1
     else:
@@ -110,7 +112,21 @@ def calc_axis_angle(R):
 
     theta = math.acos(c)
 
+    print("mx, my, mz, theta")
+    print(mx)
+    print(my)
+    print(mz)
+    print(theta)
+    sys.exit()
+    
     return [mx*theta, my*theta, mz*theta]
+    '''
+    # Method from Wikipedia page for rotation matrix
+    rx = R[2,1] - R[1,2]
+    ry = R[0,2] - R[2,0]
+    rz = R[1,0] - R[0,1]
+
+    return [rx, ry, rz]
 
 
 def close_connections():
@@ -182,7 +198,6 @@ def get_robot_pose():  # Returns homogenous transformation matrix to robot base 
     P_A_B = np.array([curr_pose[0:3]]).T
     curr_r = np.array(curr_pose[3:6])
     global_theta = np.linalg.norm(curr_r)
-    print("global_theta = {0}".format(global_theta))
     m = curr_r / global_theta
     c = math.cos(global_theta)
     s = math.sin(global_theta)
@@ -191,6 +206,16 @@ def get_robot_pose():  # Returns homogenous transformation matrix to robot base 
                     [m[0]*m[1]*v+m[2]*s, m[1]*m[1]*v+c, m[1]*m[2]*v-m[0]*s],
                     [m[0]*m[2]*v-m[1]*s, m[1]*m[2]*v+m[0]*s, m[2]*m[2]*v+c]])
     T_BA = np.concatenate((np.concatenate((R_BA, P_A_B), axis=1), np.array([[0, 0, 0, 1]])))
+    
+    print("curr_pose, P_A_B, curr_r")
+    print(curr_pose)
+    print(P_A_B)
+    print(curr_r)
+    print("global_theta = {0}".format(global_theta))
+    print("R_BA then T_BA")
+    print(R_BA)
+    print(T_BA)
+    #sys.exit()
     
     return T_BA
 
@@ -288,6 +313,10 @@ def visual_servoing(this_cone_scan_pose):
 
 
 def place_a_cone(T_CP, T_BA_image):
+    print("T_CP, T_BA_image")
+    print(T_CP)
+    print(T_BA_image)
+    
     R_PA_goal = np.array([[-1, 0, 0],
                           [0, -1, 0],
                           [0, 0, 1]])
@@ -316,6 +345,11 @@ def place_a_cone(T_CP, T_BA_image):
     T_BA_a1 = np.matmul(T_BA_image, np.matmul(T_AT, np.matmul(T_TC, np.matmul(T_CP, T_PA_a1))))
     T_BA_a2 = np.matmul(T_BA_image, np.matmul(T_AT, np.matmul(T_TC, np.matmul(T_CP, T_PA_a2))))
     T_BA_place = np.matmul(T_BA_image, np.matmul(T_AT, np.matmul(T_TC, np.matmul(T_CP, T_PA_place))))
+
+    print("T_BA_a1, T_BA_a2, T_BA_place")
+    print(T_BA_a1)
+    print(T_BA_a2)
+    print(T_BA_place)
 
     m = calc_axis_angle(T_BA_a1[0:3, 0:3])
     a1_pose = np.array([T_BA_a1[0,3], T_BA_a1[1,3], T_BA_a1[2,3], m[0], m[1], m[2]])

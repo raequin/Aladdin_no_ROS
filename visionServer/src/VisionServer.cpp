@@ -115,7 +115,7 @@ std::string GetPoses(Camera& camera_FlyCap, apriltag_detector_t *atdt, apriltag_
     //      std::cout << "t->nrows = " << pose.t->nrows << "\tt->ncols = " << pose.t->ncols << std::endl;
     for (int i = 0; i < 3; i++) {
       for (int j = 0; j < 3; j++) {
-	oss << matd_get(pose.R, i, j) << " ";
+	oss << std::setprecision(10) << std::fixed << matd_get(pose.R, i, j) << " ";  // Use fixed in to avoid scientific notation, which is not handled on receiving end
 	//std::cout << matd_get(pose.R, i, j) << " ";
       }
       //std::cout << std::endl;
@@ -123,7 +123,7 @@ std::string GetPoses(Camera& camera_FlyCap, apriltag_detector_t *atdt, apriltag_
     oss << ")(";
     //std::cout << std::endl;
     for (int i = 0; i < 3; i++) {
-      oss << matd_get(pose.t, i, 0) << " ";
+      oss << std::setprecision(10) << std::fixed << matd_get(pose.t, i, 0) << " ";  // Use fixed in to avoid scientific notation, which is not handled on receiving end
       //std::cout << matd_get(pose.t, i, 0) << std::endl;
     }
     oss << ")]";
