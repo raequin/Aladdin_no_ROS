@@ -454,12 +454,22 @@ if __name__ == "__main__":
     print(poses_list)
 
     # For now assume only one tag found
+    R_CP = np.array(poses_list[1:10]).reshape(3,3)
+    P_P_C = np.array(poses_list[10:13]).reshape(3,1)
+    P_P_C[0,0] = P_P_C[0,0] + CAMERA_X_FUDGE_FACTOR
+    P_P_C[1,0] = P_P_C[1,0] + CAMERA_Y_FUDGE_FACTOR
+    P_P_C[2,0] = P_P_C[2,0] + CAMERA_Z_FUDGE_FACTOR
+    T_CP = np.concatenate((np.concatenate((R_CP, P_P_C), axis=1), np.array([[0, 0, 0, 1]])))
+    '''
+    # This is the old (pre 20190911) version and it seems incorrect.
+    # It is kept here because somehow the demo worked with this code.
     R_CP = np.array(poses_list[0:9]).reshape(3,3)
     P_P_C = np.array(poses_list[9:12]).reshape(3,1)
     P_P_C[0,0] = P_P_C[0,0] + CAMERA_X_FUDGE_FACTOR
     P_P_C[1,0] = P_P_C[1,0] + CAMERA_Y_FUDGE_FACTOR
     P_P_C[2,0] = P_P_C[2,0] + CAMERA_Z_FUDGE_FACTOR
     T_CP = np.concatenate((np.concatenate((R_CP, P_P_C), axis=1), np.array([[0, 0, 0, 1]])))
+    '''
     print("T_CP")
     print(T_CP)
 
