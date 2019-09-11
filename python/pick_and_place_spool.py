@@ -14,14 +14,15 @@ import zmq
 R_TC = np.array([[0, 0, 1],
                  [0, 1, 0],
                  [-1, 0, 0]])  # Rotation matrix to camera frame from tool flange
-P_C_T = np.array([[.025, -.063, .154]]).T
+#P_C_T = np.array([[.025, -.063, .154]]).T  # Pre 20190911 values
+P_C_T = np.array([[.05, -.063, .145]]).T
 T_TC = np.concatenate((np.concatenate((R_TC, P_C_T), axis=1), np.array([[0, 0, 0, 1]])))
 
 # Transformation to tool flange from actuator
 R_TA = np.array([[1, 0, 0],
                  [0, 1, 0],
                  [0, 0, 1]])
-P_A_T = np.array([[.205, 0, .112]]).T
+P_A_T = np.array([[.198, 0, .105]]).T
 T_TA = np.concatenate((np.concatenate((R_TA, P_A_T), axis=1), np.array([[0, 0, 0, 1]])))
 
 # Transformation to actuator from tool flange
@@ -53,7 +54,7 @@ CONE_SPACING = .29  # Distance from cone center to cone center (m)
 PALLET_LAYER_HEIGHT = .32  # Vertical distance from top of one cone layer to next
 BOTTOM_CONE_HEIGHT = -.541  # z-coordinate of cone-tube top in robot base frame
 CONE_TOP_TO_TOOL_DIST_FOR_SCAN = .491  # Offset in cone-axis direction between cone top and tool flange during scan
-CONE_TOP_TO_TOOL_DIST_FOR_PICK = .159  # Offset in cone-axis direction between cone top and tool flange when actuator grasps cone
+CONE_TOP_TO_TOOL_DIST_FOR_PICK = .18#.159  # Offset in cone-axis direction between cone top and tool flange when actuator grasps cone
 NOMINAL_FIRST_CONE_SCAN_X = -.712  # x-coordinate (in base frame) for scanning nominal first cone location
 NOMINAL_FIRST_CONE_SCAN_Y = .271  # y-coordinate (in base frame) for scanning nominal first cone location
 NOMINAL_FIRST_CONE_SCAN_Z = BOTTOM_CONE_HEIGHT + CONE_TOP_TO_TOOL_DIST_FOR_SCAN + (NUM_LAYERS-1) * PALLET_LAYER_HEIGHT  # z-coordinate (in base frame) for scanning nominal first cone location
@@ -69,9 +70,9 @@ if CONE_TUBE_LENGTH > PICK_MOVE[0]:
     sys.exit()
 
 # AprilTag estimate seems to be off.  Here are translation corrections.
-CAMERA_X_FUDGE_FACTOR = .015  # m difference between actual x-direction tag pose and reported value
-CAMERA_Y_FUDGE_FACTOR = .015
-CAMERA_Z_FUDGE_FACTOR = .015
+CAMERA_X_FUDGE_FACTOR = 0.008#.015  # m difference between actual x-direction tag pose and reported value
+CAMERA_Y_FUDGE_FACTOR = -0.008#.015
+CAMERA_Z_FUDGE_FACTOR = 0#.015
 
 # Max allowable norm of joint speeds (in rad/s) to be considered stopped (not really useful, see wait_for_robot_to_stop())
 JOINT_SPEEDS_NORM_THRESHOLD = .01
@@ -84,7 +85,7 @@ global_theta = 0  # Using a global variable for some reason (laziness?)
 
 def calc_axis_angle(R):
     # Method from "Kinematic Analysis of Robot Manipulators," by Duffy and Crane
-    '''
+
     print("R")
     print(R)
     c = (R[0,0]+R[1,1]+R[2,2]-1) / 2
@@ -117,7 +118,7 @@ def calc_axis_angle(R):
     print(my)
     print(mz)
     print(theta)
-    sys.exit()
+    #sys.exit()
     
     return [mx*theta, my*theta, mz*theta]
     '''
@@ -127,7 +128,7 @@ def calc_axis_angle(R):
     rz = R[1,0] - R[0,1]
 
     return [rx, ry, rz]
-
+    '''
 
 def close_connections():
     robot_connection.close()
@@ -312,6 +313,78 @@ def visual_servoing(this_cone_scan_pose):
             return 0
 
 
+        
+def test_tag():    
+    TAG_TEST_JOINT = [math.radians(x) for x in [-100, -68, -123, -169, -97, -180]]
+    print("movej to TAG_TEST_JOINT")
+    send_robot_msg(TAG_TEST_JOINT, "1")
+    wait_for_robot_to_stop()
+
+    # Get current poses of robot and tag
+    T_BA = get_robot_pose()  # Get current transformation to base from TCP
+    print("getting peg poses")
+    poses_list = get_tag_poses()
+    print("poses found:")
+    print(poses_list)
+
+    # For now, assume one tag found
+    R_CP = np.array(poses_list[1:10]).reshape(3,3)
+    P_P_C = np.array(poses_list[10:13]).reshape(3,1)
+    P_P_C[0,0] = P_P_C[0,0] + CAMERA_X_FUDGE_FACTOR
+    P_P_C[1,0] = P_P_C[1,0] + CAMERA_Y_FUDGE_FACTOR
+    P_P_C[2,0] = P_P_C[2,0] + CAMERA_Z_FUDGE_FACTOR
+    T_CP = np.concatenate((np.concatenate((R_CP, P_P_C), axis=1), np.array([[0, 0, 0, 1]])))
+    print("T_CP")
+    print(T_CP)
+
+    is_testing_cone_hanging = False
+    if is_testing_cone_hanging:
+        # Where the actuator is to go relative to the tag ("peg")
+        R_PA_goal = np.array([[-1, 0, 0], [0, -1, 0], [0, 0, 1]])
+        P_A_P_goal_approach = np.array([[.2, 0, 0]]).T
+        P_A_P_goal = np.array([[.1, 0, 0]]).T
+        
+        T_PA_goal_approach = np.concatenate((np.concatenate((R_PA_goal, P_A_P_goal_approach), axis=1), np.array([[0, 0, 0, 1]])))
+        T_PA_goal = np.concatenate((np.concatenate((R_PA_goal, P_A_P_goal), axis=1), np.array([[0, 0, 0, 1]])))
+        
+        T_BA_goal_approach = np.matmul(T_BA, np.matmul(T_AT, np.matmul(T_TC, np.matmul(T_CP, T_PA_goal_approach))))
+        T_BA_goal = np.matmul(T_BA, np.matmul(T_AT, np.matmul(T_TC, np.matmul(T_CP, T_PA_goal))))
+        print(T_BA_goal_approach)
+        print(T_BA_goal)
+        
+        m = calc_axis_angle(T_BA_goal_approach[0:3, 0:3])
+        test_pose = np.array([T_BA_goal_approach[0,3], T_BA_goal_approach[1,3], T_BA_goal_approach[2,3], m[0], m[1], m[2]])
+        send_robot_msg(test_pose, "3")
+        wait_for_robot_to_stop()
+        
+        m = calc_axis_angle(T_BA_goal[0:3, 0:3])
+        test_pose = np.array([T_BA_goal[0,3], T_BA_goal[1,3], T_BA_goal[2,3], m[0], m[1], m[2]])
+        send_robot_msg(test_pose, "3")
+        wait_for_robot_to_stop()
+
+    else:
+        # Where the actuator is to go relative to the tag ("peg")
+        R_PA_goal = np.array([[0, 0, -1],
+                              [0, 1, 0],
+                              [1, 0, 0]])
+        P_A_P_goal = np.array([[0, 0, 0]]).T        
+        T_PA_goal = np.concatenate((np.concatenate((R_PA_goal, P_A_P_goal), axis=1), np.array([[0, 0, 0, 1]])))        
+        T_BA_goal = np.matmul(T_BA, np.matmul(T_AT, np.matmul(T_TC, np.matmul(T_CP, T_PA_goal))))
+        print("T_PA_goal")
+        print(T_PA_goal)
+        print("T_BA_goal")
+        print(T_BA_goal)
+
+        # Move robot to desired pose
+        m = calc_axis_angle(T_BA_goal[0:3, 0:3])
+        test_pose = np.array([T_BA_goal[0,3], T_BA_goal[1,3], T_BA_goal[2,3], m[0], m[1], m[2]])
+        print("test_pose")
+        print(test_pose)
+        send_robot_msg(test_pose, "3")
+        wait_for_robot_to_stop()
+
+
+
 def place_a_cone(T_CP, T_BA_image):
     print("T_CP, T_BA_image")
     print(T_CP)
@@ -436,6 +509,11 @@ if __name__ == "__main__":
     send_robot_msg(HOME_JOINT, "1")
     wait_for_robot_to_stop()
 
+    is_testing_tag = False
+    if is_testing_tag:  # This is just for dialing-in usage of AprilTag data
+        test_tag()
+        sys.exit()
+
     print("movej to INTERMEDIATE_JOINT")
     send_robot_msg(INTERMEDIATE_JOINT, "1")
     wait_for_robot_to_stop()
@@ -453,7 +531,7 @@ if __name__ == "__main__":
     print("poses found:")
     print(poses_list)
 
-    # For now assume only one tag found
+    # For now, assume only one tag found
     R_CP = np.array(poses_list[1:10]).reshape(3,3)
     P_P_C = np.array(poses_list[10:13]).reshape(3,1)
     P_P_C[0,0] = P_P_C[0,0] + CAMERA_X_FUDGE_FACTOR
@@ -474,7 +552,6 @@ if __name__ == "__main__":
     print(T_CP)
 
     # Done getting tag info, return to home pose
-    '''
     print("movej to INTERMEDIATE_JOINT")
     send_robot_msg(INTERMEDIATE_JOINT, "1")
     wait_for_robot_to_stop()
@@ -522,11 +599,20 @@ if __name__ == "__main__":
     print("movej to HOME_JOINT")
     send_robot_msg(HOME_JOINT, "1")
     wait_for_robot_to_stop()
-    '''
+
     print("movej to INTERMEDIATE_JOINT")
     send_robot_msg(INTERMEDIATE_JOINT, "1")
     wait_for_robot_to_stop()
 
+    # Hang-a-cone routine
     place_a_cone(T_CP, T_BA)
+
+    # Return to home
+    print("movej to INTERMEDIATE_JOINT")
+    send_robot_msg(INTERMEDIATE_JOINT, "1")
+    wait_for_robot_to_stop()
+    print("movej to HOME_JOINT")
+    send_robot_msg(HOME_JOINT, "1")
+    wait_for_robot_to_stop()
     
     close_connections()
