@@ -460,6 +460,7 @@ if __name__ == "__main__":
     P_P_C[1,0] = P_P_C[1,0] + CAMERA_Y_FUDGE_FACTOR
     P_P_C[2,0] = P_P_C[2,0] + CAMERA_Z_FUDGE_FACTOR
     T_CP = np.concatenate((np.concatenate((R_CP, P_P_C), axis=1), np.array([[0, 0, 0, 1]])))
+    print("T_CP")
     print(T_CP)
 
     # Done getting tag info, return to home pose

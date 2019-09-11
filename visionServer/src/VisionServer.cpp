@@ -40,9 +40,12 @@ using namespace FlyCapture2;
 
 apriltag_detection_info_t InitDetectionInfo() {
   apriltag_detection_info_t ret;
-  
+
+  // NOTE: the following instruction might apply, but I (MQM) do not think so:
+  // "you have to pass in a negative fx parameter.  This is ... due to the OpenCV convention of having z negative"
+  // (from https://april.eecs.umich.edu/pipermail/apriltag-devel/2017-April/000079.html)
   ret.tagsize = .0292;//.0352;  // meter
-  ret.fx = 1301.54;  // pixel
+  ret.fx = -1301.54;  // pixel
   ret.fy = 1302.22;  // pixel
   ret.cx = 633.76;  // pixel
   ret.cy = 474.73;  // pixel
